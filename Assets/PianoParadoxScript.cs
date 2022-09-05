@@ -113,7 +113,10 @@ public class PianoParadoxScript : MonoBehaviour
         _currentStage++;
         if (_currentStage != _stageCount)
         {
-            ScreenText.text = (_currentStage + 1).ToString();
+            string str = (_currentStage + 1).ToString();
+            if (_currentStage < 6)
+                str += " + " + _offsetInputs[_currentStage].ToString();
+            ScreenText.text = str;
             for (int i = 0; i < 12; i++)
             {
                 if (_displayedNotes[_currentStage] == i)
@@ -153,8 +156,17 @@ public class PianoParadoxScript : MonoBehaviour
         return delegate ()
         {
             Audio.PlaySoundAtTransform(PianoSounds[i].name, transform);
-            if (_moduleSolved || !_submissionPhase)
+            if (_moduleSolved)
                 return false;
+            if (!_submissionPhase)
+            {
+                Module.HandleStrike();
+                if (_strikeAnimation != null)
+                    StopCoroutine(_strikeAnimation);
+                _strikeAnimation = StartCoroutine(StrikeAnimation());
+                Debug.LogFormat("[Piano Paradox #{0}] Pressed a key before input was expected. Strike.", _moduleId);
+                return false;
+            }
             if (i == _requiredInputs[_inputIx])
             {
                 Debug.LogFormat("[Piano Paradox #{0}] Correctly pressed {1}.", _moduleId, _keyNames[i]);
@@ -174,8 +186,7 @@ public class PianoParadoxScript : MonoBehaviour
                 int st = _inputIx;
                 while ((st + 6) < _stageCount)
                     st += 6;
-                Debug.Log(st);
-                ScreenText.text = (_inputIx + 1).ToString() + "   " + _keyNames[_displayedNotes[st]].ToString();
+                ScreenText.text = (_inputIx + 1).ToString() + " + " + _offsetInputs[_inputIx % 6];
                 Module.HandleStrike();
                 for (int j = 0; j < 12; j++)
                 {
