@@ -1,11 +1,4 @@
-﻿using System;
-using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
-using System.Text.RegularExpressions;
-using UnityEngine;
-using Rnd = UnityEngine.Random;
-using KModkit;
+﻿using UnityEngine;
 
 public class DummyScript : MonoBehaviour
 {
@@ -13,13 +6,5 @@ public class DummyScript : MonoBehaviour
     public KMBombInfo BombInfo;
     public KMAudio Audio;
 
-    private int _moduleId;
-    private static int _moduleIdCounter = 1;
-    private bool _moduleSolved;
-
-    private void Start()
-    {
-        _moduleId = _moduleIdCounter++;
-        Module.GetComponent<KMSelectable>().OnFocus += () => Module.HandlePass();
-    }
+    private void Start() { Module.GetComponent<KMSelectable>().OnFocus += () => Module.HandlePass(); }
 }

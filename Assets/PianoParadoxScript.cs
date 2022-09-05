@@ -33,6 +33,8 @@ public class PianoParadoxScript : MonoBehaviour
     private int _currentSolves;
     private int _currentStage = -1;
     private Coroutine _showStage;
+    private Coroutine[] _pianoPressAnimations = new Coroutine[12];
+    
 
     private bool _submissionPhase;
     private bool _readyToAdvance;
@@ -52,6 +54,7 @@ public class PianoParadoxScript : MonoBehaviour
         {
             KeySels[i] = KeyObjs[i].GetComponent<KMSelectable>();
             KeySels[i].OnInteract += KeyPress(i);
+            KeySels[i].OnInteractEnded += KeyRelease(i);
         }
         FakeStatusLight = Instantiate(FakeStatusLight);
         FakeStatusLight.GetStatusLights(transform);
@@ -73,6 +76,7 @@ public class PianoParadoxScript : MonoBehaviour
         _stageCount = BombInfo.GetSolvableModuleNames().Count(i => !_ignoredModules.Contains(i));
         if (_stageCount == 0)
         {
+            Debug.LogFormat("[Piano Paradox #{0}] No stages generated.", _moduleId);
             StartCoroutine(SolveAnimation());
             yield break;
         }
@@ -115,7 +119,7 @@ public class PianoParadoxScript : MonoBehaviour
         {
             string str = (_currentStage + 1).ToString();
             if (_currentStage < 6)
-                str += " + " + _offsetInputs[_currentStage].ToString();
+                str += "\t+"  + _offsetInputs[_currentStage].ToString();
             ScreenText.text = str;
             for (int i = 0; i < 12; i++)
             {
@@ -143,7 +147,7 @@ public class PianoParadoxScript : MonoBehaviour
             _submissionPhase = true;
         if (_currentStage != _stageCount)
         {
-            yield return new WaitForSeconds(1f);
+            yield return new WaitForSeconds(0.2f);
             _readyToAdvance = true;
         }
         yield break;
@@ -155,6 +159,9 @@ public class PianoParadoxScript : MonoBehaviour
     {
         return delegate ()
         {
+            if (_pianoPressAnimations[i] != null)
+                StopCoroutine(_pianoPressAnimations[i]);
+            _pianoPressAnimations[i] = StartCoroutine(PianoPressAnimation(i, true));
             Audio.PlaySoundAtTransform(PianoSounds[i].name, transform);
             if (_moduleSolved)
                 return false;
@@ -169,7 +176,7 @@ public class PianoParadoxScript : MonoBehaviour
             }
             if (i == _requiredInputs[_inputIx])
             {
-                Debug.LogFormat("[Piano Paradox #{0}] Correctly pressed {1}.", _moduleId, _keyNames[i]);
+                // Debug.LogFormat("[Piano Paradox #{0}] Correctly pressed {1}.", _moduleId, _keyNames[i]);
                 for (int j = 0; j < 12; j++)
                     KeyObjs[j].GetComponent<MeshRenderer>().material = KeyMats[_keyColors[j]];
                 _inputIx++;
@@ -177,16 +184,16 @@ public class PianoParadoxScript : MonoBehaviour
                 if (_inputIx == _stageCount)
                 {
                     StartCoroutine(SolveAnimation());
-                    ScreenText.text = "-----";
+                    ScreenText.text = "";
                 }
             }
             else
             {
-                Debug.LogFormat("[Piano Paradox #{0}] Pressed {1}, when {2} was expected. Strike.", _moduleId, _keyNames[i], _keyNames[_requiredInputs[_inputIx]]);
+                Debug.LogFormat("[Piano Paradox #{0}] At stage {1}, {2} was pressed, when {3} was expected. Strike.", _moduleId, _inputIx + 1, _keyNames[i], _keyNames[_requiredInputs[_inputIx]]);
                 int st = _inputIx;
                 while ((st + 6) < _stageCount)
                     st += 6;
-                ScreenText.text = (_inputIx + 1).ToString() + " + " + _offsetInputs[_inputIx % 6];
+                ScreenText.text = (_inputIx + 1).ToString() + "\t+"  + _offsetInputs[_inputIx % 6];
                 Module.HandleStrike();
                 for (int j = 0; j < 12; j++)
                 {
@@ -203,6 +210,16 @@ public class PianoParadoxScript : MonoBehaviour
         };
     }
 
+    private Action KeyRelease(int i)
+    {
+        return delegate ()
+        {
+            if (_pianoPressAnimations[i] != null)
+                StopCoroutine(_pianoPressAnimations[i]);
+            _pianoPressAnimations[i] = StartCoroutine(PianoPressAnimation(i, false));
+        };
+    }
+
     private IEnumerator StrikeAnimation()
     {
         FakeStatusLight.SetStrike();
@@ -212,17 +229,35 @@ public class PianoParadoxScript : MonoBehaviour
 
     private IEnumerator SolveAnimation()
     {
+        Debug.LogFormat("[Piano Paradox #{0}] Module solved.", _moduleId);
         if (_strikeAnimation != null)
             StopCoroutine(_strikeAnimation);
         _moduleSolved = true;
         FakeStatusLight.SetPass();
         yield return new WaitForSeconds(0.5f);
+        ScreenText.text = "G";
         FakeStatusLight.SetInActive();
         Audio.PlaySoundAtTransform("SnapSnap", transform);
         yield return new WaitForSeconds(0.5f);
+        ScreenText.text = "GG";
         FakeStatusLight.SetPass();
         Module.HandlePass();
         _realModuleSolved = true;
+    }
+
+    private IEnumerator PianoPressAnimation(int i, bool pressIn)
+    {
+        var duration = 0.1f;
+        var elapsed = 0f;
+        var end = pressIn ? 3f : 0f;
+        var t = KeyObjs[i].transform.localEulerAngles;
+        while (elapsed < duration)
+        {
+            KeyObjs[i].transform.localEulerAngles = new Vector3(Easing.InOutQuad(elapsed, t.x, end, duration), 0f, 0f);
+            yield return null;
+            elapsed += Time.deltaTime;
+        }
+        KeyObjs[i].transform.localEulerAngles = new Vector3(end, 0f, 0f);
     }
 
 #pragma warning disable 0414
@@ -256,10 +291,10 @@ public class PianoParadoxScript : MonoBehaviour
             KeySels[list[i]].OnInteract();
             if (list.Count >= 6 && list[list.Count - 6] == 10 && list[list.Count - 5] == 9 && list[list.Count - 4] == 5 && list[list.Count - 3] == 7 && list[list.Count - 2] == 9 && list[list.Count - 1] == 10)
             {
-                if ((i == list.Count - 6) || (i == list.Count - 4) || (i == list.Count - 2))
+                if ((i == list.Count - 6))
                     waitTime = 0.16f;
-                if ((i == list.Count - 5) || (i == list.Count - 3) || (i == list.Count - 1))
-                    waitTime = 0.32f;
+                if ((i == list.Count - 5) || (i == list.Count - 4) || (i == list.Count - 3) || (i == list.Count - 2) || (i == list.Count - 1))
+                    waitTime = 0.48f;
                 if (list.Count > 6 && i == list.Count - 7)
                     waitTime = 0.6f;
             }
@@ -280,10 +315,10 @@ public class PianoParadoxScript : MonoBehaviour
             KeySels[list[i]].OnInteract();
             if (list.Count >= 6 && list[list.Count - 6] == 10 && list[list.Count - 5] == 9 && list[list.Count - 4] == 5 && list[list.Count - 3] == 7 && list[list.Count - 2] == 9 && list[list.Count - 1] == 10)
             {
-                if ((i == list.Count - 6) || (i == list.Count - 4) || (i == list.Count - 2))
+                if ((i == list.Count - 6))
                     waitTime = 0.16f;
-                if ((i == list.Count - 5) || (i == list.Count - 3) || (i == list.Count - 1))
-                    waitTime = 0.32f;
+                if ((i == list.Count - 5) || (i == list.Count - 4) || (i == list.Count - 3) || (i == list.Count - 2) || (i == list.Count - 1))
+                    waitTime = 0.48f;
                 if (list.Count > 6 && i == list.Count - 7)
                     waitTime = 0.6f;
             }
